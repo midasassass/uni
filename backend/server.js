@@ -8,8 +8,12 @@ import helmet from 'helmet';
 
 const app = express();
 app.use(helmet());
-app.use(cors({ origin: 'https://uniunity.space' }));
+app.use(cors({ origin: 'https://uniunity-4fnm.onrender.com' })); // Update CORS to match Render URL
 app.use(express.json());
+
+app.get('/', (req, res) => {
+  res.send('UniUnity Backend is running. Use /api/* endpoints for admin access.');
+});
 
 const connectWithRetry = () => {
   mongoose.connect(process.env.MONGODB_URI, {
@@ -58,8 +62,8 @@ app.get('/api/blogs', async (req, res) => { const blogs = await Blog.find(); res
 app.post('/api/blogs', upload.fields([{ name: 'thumbnailImage' }, { name: 'seoImage' }]), async (req, res) => {
   const { title, content, seoTitle, seoDescription } = req.body;
   const blog = new Blog({
-    title, content, image: req.files['thumbnailImage'] ? `https://uniunity.space/uploads/${req.files['thumbnailImage'][0].filename}` : '',
-    seoTitle, seoDescription, seoImage: req.files['seoImage'] ? `https://uniunity.space/uploads/${req.files['seoImage'][0].filename}` : '',
+    title, content, image: req.files['thumbnailImage'] ? `https://uniunity-4fnm.onrender.com/uploads/${req.files['thumbnailImage'][0].filename}` : '',
+    seoTitle, seoDescription, seoImage: req.files['seoImage'] ? `https://uniunity-4fnm.onrender.com/uploads/${req.files['seoImage'][0].filename}` : '',
   });
   await blog.save();
   res.json(blog);
@@ -68,17 +72,18 @@ app.put('/api/blogs/:id', upload.fields([{ name: 'thumbnailImage' }, { name: 'se
   const { id } = req.params;
   const { title, content, seoTitle, seoDescription } = req.body;
   const update = { title, content, seoTitle, seoDescription };
-  if (req.files['thumbnailImage']) update.image = `https://uniunity.space/uploads/${req.files['thumbnailImage'][0].filename}`;
-  if (req.files['seoImage']) update.seoImage = `https://uniunity.space/uploads/${req.files['seoImage'][0].filename}`;
+  if (req.files['thumbnailImage']) update.image = `https://uniunity-4fnm.onrender.com/uploads/${req.files['thumbnailImage'][0].filename}`;
+  if (req.files['seoImage']) update.seoImage = `https://uniunity-4fnm.onrender.com/uploads/${req.files['seoImage'][0].filename}`;
   const blog = await Blog.findByIdAndUpdate(id, update, { new: true });
   res.json(blog);
 });
 app.delete('/api/blogs/:id', async (req, res) => { const { id } = req.params; await Blog.findByIdAndDelete(id); res.json({ message: 'Blog deleted' }); });
-app.post('/api/upload', upload.single('image'), (req, res) => { const imageUrl = `https://uniunity.space/uploads/${req.file.filename}`; res.json({ imageUrl }); });
+app.post('/api/upload', upload.single('image'), (req, res) => { const imageUrl = `https://uniunity-4fnm.onrender.com/uploads/${req.file.filename}`; res.json({ imageUrl }); });
 app.get('/api/admins', async (req, res) => { const admins = await Admin.find(); res.json(admins); });
 app.post('/api/admins', async (req, res) => { const admin = new Admin(req.body); await admin.save(); res.json(admin); });
 app.post('/api/config', async (req, res) => { const config = await Config.findOneAndUpdate({}, req.body, { upsert: true, new: true }); res.json(config); });
-app.use('/uploads', express.static('uploads'));
+// Comment out static uploads for now (Render doesn't persist files)
+// app.use('/uploads', express.static('uploads'));
 
-const PORT = process.env.PORT || 443;
+const PORT = process.env.PORT || 5000; // Adjusted from 443 to 5000
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
