@@ -28,8 +28,10 @@ const Admin = () => {
   const [notificationMessage, setNotificationMessage] = useState('');
   const [debouncedTitle] = useDebounce(title, 500);
 
-  // Base URL for Render backend
-  const API_BASE_URL = 'https://uniunity-4fnm.onrender.com/api';
+  // Dynamic API base URL for production and local environments
+  const API_BASE_URL = process.env.NODE_ENV === 'production'
+    ? 'https://uniunity-4fnm.onrender.com/api'
+    : 'http://localhost:5000/api';
 
   useEffect(() => {
     fetchBlogs();
@@ -97,7 +99,7 @@ const Admin = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await axios.post(`${https://uniunity-4fnm.onrender.com/api}/auth`, { username, password });
+      const response = await axios.post(`${API_BASE_URL}/auth`, { username, password });
       if (response.data.success) {
         setError('');
       } else {
