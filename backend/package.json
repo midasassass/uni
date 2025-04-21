@@ -1,16 +1,20 @@
 {
   "name": "uniunity-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",  // Change from "index.js"
+  "type": "module",     // Add this for ESM support
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node server.js",  // Change from "node index.js"
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "mongoose": "^7.0.3",
+    "multer": "^1.4.5-lts.1",  // Add for file uploads
+    "path": "^0.12.7",         // Add for path module
+    "helmet": "^7.1.0",        // Add for security
     "nodemailer": "^6.9.1",
     "web-push": "^3.6.5"
   },
