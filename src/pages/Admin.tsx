@@ -31,6 +31,9 @@ const Admin = () => {
   const [notificationMessage, setNotificationMessage] = useState('');
   const [debouncedTitle] = useDebounce(title, 500);
 
+  // Base URL for Render backend
+  const API_BASE_URL = 'https://uniunity-4fnm.onrender.com/api';
+
   useEffect(() => {
     fetchBlogs();
     fetchAdmins();
@@ -66,7 +69,7 @@ const Admin = () => {
 
   const fetchBlogs = async () => {
     try {
-      const response = await axios.get('https://api.uniunity.space/api/blogs');
+      const response = await axios.get(`${API_BASE_URL}/blogs`);
       setBlogs(response.data);
     } catch (error) {
       setMessage('Failed to fetch blogs!');
@@ -76,7 +79,7 @@ const Admin = () => {
 
   const fetchAdmins = async () => {
     try {
-      const response = await axios.get('https://api.uniunity.space/api/admins');
+      const response = await axios.get(`${API_BASE_URL}/admins`);
       setAdmins(response.data);
     } catch (error) {
       setMessage('Failed to fetch admins!');
@@ -86,7 +89,7 @@ const Admin = () => {
 
   const fetchConfig = async () => {
     try {
-      const response = await axios.get('https://api.uniunity.space/api/config');
+      const response = await axios.get(`${API_BASE_URL}/config`);
       setConfig(response.data);
     } catch (error) {
       setMessage('Failed to fetch config!');
@@ -152,7 +155,7 @@ const Admin = () => {
       if (thumbnailImage) formData.append('thumbnailImage', thumbnailImage);
       if (seoImage) formData.append('seoImage', seoImage);
 
-      const url = editingPostId ? `https://api.uniunity.space/api/blogs/${editingPostId}` : 'https://api.uniunity.space/api/blogs';
+      const url = editingPostId ? `${API_BASE_URL}/blogs/${editingPostId}` : `${API_BASE_URL}/blogs`;
       const method = editingPostId ? 'put' : 'post';
 
       await axios[method](url, formData, {
@@ -171,7 +174,7 @@ const Admin = () => {
   const handleDeletePost = async (postId: string) => {
     if (confirm('Are you sure you want to delete this post?')) {
       try {
-        await axios.delete(`https://api.uniunity.space/api/blogs/${postId}`);
+        await axios.delete(`${API_BASE_URL}/blogs/${postId}`);
         fetchBlogs();
         setMessage('Post deleted successfully!');
       } catch (error) {
@@ -188,7 +191,7 @@ const Admin = () => {
     if (faviconImage) formData.append('favicon', faviconImage);
 
     try {
-      await axios.post('https://api.uniunity.space/api/config', formData, {
+      await axios.post(`${API_BASE_URL}/config`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       fetchConfig();
@@ -202,7 +205,7 @@ const Admin = () => {
   const sendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post('https://api.uniunity.space/api/send-notification', { message: notificationMessage });
+      await axios.post(`${API_BASE_URL}/send-notification`, { message: notificationMessage });
       setMessage('Notification sent successfully!');
       setNotificationMessage('');
     } catch (error) {
