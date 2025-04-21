@@ -19,9 +19,6 @@ const Admin = () => {
   const [slug, setSlug] = useState('');
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDescription, setSeoDescription] = useState('');
-  const [thumbnailImage, setThumbnailImage] = useState<File | null>(null);
-  const [seoImage, setSeoImage] = useState<File | null>(null);
-  const [faviconImage, setFaviconImage] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [blogs, setBlogs] = useState([]);
@@ -97,23 +94,17 @@ const Admin = () => {
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'password') {
-      setError('');
-    } else {
-      setError('Invalid credentials');
-    }
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, setter: React.Dispatch<React.SetStateAction<File | null>>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (file.size > 2 * 1024 * 1024) {
-        setMessage('Image size should be less than 2MB!');
-        return;
+    try {
+      const response = await axios.post(`${API_BASE_URL}/auth`, { username, password });
+      if (response.data.success) {
+        setError('');
+      } else {
+        setError('Invalid credentials');
       }
-      setter(file);
+    } catch (error) {
+      setError('Login failed!');
     }
   };
 
@@ -123,9 +114,6 @@ const Admin = () => {
     setSlug('');
     setSeoTitle('');
     setSeoDescription('');
-    setThumbnailImage(null);
-    setSeoImage(null);
-    setFaviconImage(null);
     setEditingPostId(null);
     localStorage.removeItem('draftPost');
   }, []);
@@ -147,20 +135,16 @@ const Admin = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const formData = new FormData();
-      formData.append('title', title);
-      formData.append('content', content);
-      formData.append('seoTitle', seoTitle || `${title} | UniUnity`);
-      formData.append('seoDescription', seoDescription || content.substring(0, 160));
-      if (thumbnailImage) formData.append('thumbnailImage', thumbnailImage);
-      if (seoImage) formData.append('seoImage', seoImage);
-
+      const data = {
+        title,
+        content,
+        seoTitle: seoTitle || `${title} | UniUnity`,
+        seoDescription: seoDescription || content.substring(0, 160),
+      };
       const url = editingPostId ? `${API_BASE_URL}/blogs/${editingPostId}` : `${API_BASE_URL}/blogs`;
       const method = editingPostId ? 'put' : 'post';
 
-      await axios[method](url, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await axios[method](url, data);
       fetchBlogs();
       resetForm();
       setMessage(`${editingPostId ? 'Updated' : 'Published'} post successfully!`);
@@ -187,11 +171,10 @@ const Admin = () => {
   const handleUpdateConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     const form = e.target as HTMLFormElement;
-    const formData = new FormData(form);
-    if (faviconImage) formData.append('favicon', faviconImage);
+    const data = new FormData(form);
 
     try {
-      await axios.post(`${API_BASE_URL}/config`, formData, {
+      await axios.post(`${API_BASE_URL}/config`, data, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       fetchConfig();
@@ -235,7 +218,7 @@ const Admin = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, title, content, thumbnailImage, seoImage, seoTitle, seoDescription]);
+  }, [activeTab, title, content, seoTitle, seoDescription]);
 
   if (!username || !password) {
     return (
@@ -460,58 +443,6 @@ const Admin = () => {
                             placeholder="post-url-slug"
                           />
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-1">Thumbnail Image*</label>
-                          <div className="flex items-center gap-3">
-                            <label className="flex-1 cursor-pointer">
-                              <div className="px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 hover:bg-gray-700 transition-colors flex items-center justify-center gap-2">
-                                <FiUpload /> Choose File
-                              </div>
-                              <input
-                                type="file"
-                                onChange={(e) => handleImageChange(e, setThumbnailImage)}
-                                accept="image/*"
-                                className="hidden"
-                              />
-                            </label>
-                          </div>
-                          {thumbnailImage && (
-                            <div className="mt-2 flex items-center gap-3">
-                              <img
-                                src={URL.createObjectURL(thumbnailImage)}
-                                alt="Thumbnail preview"
-                                className="h-12 w-12 object-cover rounded-md"
-                              />
-                              <span className="text-sm text-gray-400">{thumbnailImage.name}</span>
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-1">SEO Image</label>
-                          <div className="flex items-center gap-3">
-                            <label className="flex-1 cursor-pointer">
-                              <div className="px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 hover:bg-gray-700 transition-colors flex items-center justify-center gap-2">
-                                <FiUpload /> Choose File
-                              </div>
-                              <input
-                                type="file"
-                                onChange={(e) => handleImageChange(e, setSeoImage)}
-                                accept="image/*"
-                                className="hidden"
-                              />
-                            </label>
-                          </div>
-                          {seoImage && (
-                            <div className="mt-2 flex items-center gap-3">
-                              <img
-                                src={URL.createObjectURL(seoImage)}
-                                alt="SEO image preview"
-                                className="h-12 w-12 object-cover rounded-md"
-                              />
-                              <span className="text-sm text-gray-400">{seoImage.name}</span>
-                            </div>
-                          )}
-                        </div>
                       </div>
                       <div className="space-y-6">
                         <div>
@@ -611,32 +542,6 @@ const Admin = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">New Favicon Image</label>
-                        <div className="flex items-center gap-3">
-                          <label className="flex-1 cursor-pointer">
-                            <div className="px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 hover:bg-gray-700 transition-colors flex items-center justify-center gap-2">
-                              <FiUpload /> Choose File
-                            </div>
-                            <input
-                              type="file"
-                              onChange={(e) => handleImageChange(e, setFaviconImage)}
-                              accept="image/*"
-                              className="hidden"
-                            />
-                          </label>
-                        </div>
-                        {faviconImage && (
-                          <div className="mt-2 flex items-center gap-3">
-                            <img
-                              src={URL.createObjectURL(faviconImage)}
-                              alt="Favicon preview"
-                              className="h-12 w-12 object-cover rounded-md"
-                            />
-                            <span className="text-sm text-gray-400">{faviconImage.name}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">Banner Heading</label>
                         <input
                           name="bannerHeading"
@@ -698,7 +603,7 @@ const Admin = () => {
                         <input
                           name="adminPassword"
                           type="password"
-                          defaultValue={config.adminPassword || 'password'}
+                          defaultValue={config.adminPassword || ''}
                           className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                         />
                       </div>
