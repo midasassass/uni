@@ -78,6 +78,11 @@ app.post('/api/blogs', async (req, res) => {
   await blog.save();
   res.json(blog);
 });
+app.use(cors({
+  origin: 'https://uniunity.space',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+}));
 app.put('/api/blogs/:id', async (req, res) => {
   const { id } = req.params;
   const { title, content, seoTitle, seoDescription } = req.body;
