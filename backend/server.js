@@ -7,12 +7,14 @@ import helmet from 'helmet';
 
 const app = express();
 app.use(helmet());
-app.use(cors({ origin: 'https://uniunity-4fnm.onrender.com' }));
 app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.send('UniUnity Backend is running. Use /api/* endpoints for admin access.');
-});
+// Consolidate CORS to match the live frontend
+app.use(cors({
+  origin: 'https://uniunity.space',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+}));
 
 const connectWithRetry = () => {
   mongoose.connect(process.env.MONGODB_URI, {
@@ -42,11 +44,15 @@ const Admin = mongoose.model('Admin', adminSchema);
 
 app.post('/api/auth', async (req, res) => {
   const { username, password } = req.body;
-  const admin = await Admin.findOne({ email: username });
-  if (admin && await bcrypt.compare(password, admin.password)) {
-    res.json({ success: true });
-  } else {
-    res.status(401).json({ success: false, message: 'Invalid credentials' });
+  try {
+    const admin = await Admin.findOne({ email: username });
+    if (admin && await bcrypt.compare(password, admin.password)) {
+      res.json({ success: true });
+    } else {
+      res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
@@ -71,31 +77,87 @@ const configSchema = new mongoose.Schema({
 });
 const Config = mongoose.model('Config', configSchema);
 
-app.get('/api/blogs', async (req, res) => { const blogs = await Blog.find(); res.json(blogs); });
+// Add GET endpoint for config
+app.get('/api/config', async (req, res) => {
+  try {
+    const config = await Config.findOne();
+    res.json(config || {});
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch config' });
+  }
+});
+
+app.get('/api/blogs', async (req, res) => {
+  try {
+    const blogs = await Blog.find();
+    res.json(blogs);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch blogs' });
+  }
+});
 app.post('/api/blogs', async (req, res) => {
-  const { title, content, seoTitle, seoDescription } = req.body;
-  const blog = new Blog({ title, content, seoTitle, seoDescription });
-  await blog.save();
-  res.json(blog);
+  try {
+    const { title, content, seoTitle, seoDescription } = req.body;
+    const blog = new Blog({ title, content, seoTitle, seoDescription });
+    await blog.save();
+    res.json(blog);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to create blog' });
+  }
 });
-app.use(cors({
-  origin: 'https://uniunity.space',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true,
-}));
 app.put('/api/blogs/:id', async (req, res) => {
-  const { id } = req.params;
-  const { title, content, seoTitle, seoDescription } = req.body;
-  const blog = await Blog.findByIdAndUpdate(id, { title, content, seoTitle, seoDescription }, { new: true });
-  res.json(blog);
+  try {
+    const { id } = req.params;
+    const { title, content, seoTitle, seoDescription } = req.body;
+    const blog = await Blog.findByIdAndUpdate(id, { title, content, seoTitle, seoDescription }, { new: true });
+    if (!blog) return res.status(404).json({ message: 'Blog not found' });
+    res.json(blog);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update blog' });
+  }
 });
-app.delete('/api/blogs/:id', async (req, res) => { const { id } = req.params; await Blog.findByIdAndDelete(id); res.json({ message: 'Blog deleted' }); });
+app.delete('/api/blogs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await Blog.findByIdAndDelete(id);
+    if (!result) return res.status(404).json({ message: 'Blog not found' });
+    res.json({ message: 'Blog deleted' });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to delete blog' });
+  }
+});
+
 app.post('/api/config', async (req, res) => {
-  const { adminUsername, adminPassword, ...configData } = req.body;
-  const config = await Config.findOneAndUpdate({}, { ...configData, adminUsername, adminPassword: await bcrypt.hash(adminPassword || '', 10) }, { upsert: true, new: true });
-  res.json(config);
+  try {
+    const { adminUsername, adminPassword, ...configData } = req.body;
+    const currentConfig = await Config.findOne();
+    if (currentConfig && adminPassword) {
+      const isValid = await bcrypt.compare(req.body.currentPassword || '', currentConfig.adminPassword || '');
+      if (!isValid) return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+    const updatedConfig = await Config.findOneAndUpdate(
+      {},
+      { ...configData, adminUsername, adminPassword: adminPassword ? await bcrypt.hash(adminPassword, 10) : currentConfig?.adminPassword },
+      { upsert: true, new: true }
+    );
+    res.json(updatedConfig);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update config' });
+  }
 });
-app.post('/api/send-notification', (req, res) => { res.json({ message: 'Notification sent' }); }); // Placeholder
+
+app.post('/api/send-notification', (req, res) => {
+  try {
+    // Placeholder logic - implement actual notification service (e.g., Firebase, OneSignal)
+    res.json({ message: 'Notification sent' });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to send notification' });
+  }
+});
+
+app.get('/', (req, res) => {
+  res.send('UniUnity Backend is running. Use /api/* endpoints for admin access.');
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
