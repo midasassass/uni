@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { motion, useAnimation, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Bot, Globe, Smartphone, Users, Star, Zap, ChevronRight } from 'lucide-react';
 import { useAdminStore } from '../store/adminStore';
 
-// Image URLs for different sections
 const imageUrls = {
   hero: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1600&q=80',
   feature: 'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?auto=format&fit=crop&w=800&q=80',
@@ -19,7 +18,7 @@ const imageUrls = {
 };
 
 export default function Home() {
-  const { config } = useAdminStore();
+  const { config, initialize, loading, error } = useAdminStore();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const controls = useAnimation();
   const [email, setEmail] = useState('');
@@ -76,12 +75,18 @@ export default function Home() {
     },
   ];
 
-  // Rotate background images for hero section
+  // Initialize data with polling
+  useEffect(() => {
+    initialize();
+    const interval = setInterval(() => initialize(), 30000);
+    return () => clearInterval(interval);
+  }, [initialize]);
+
+  // Rotate background images
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentImageIndex((prev) => (prev + 1) % 3);
     }, 8000);
-
     return () => clearInterval(interval);
   }, []);
 
@@ -97,12 +102,31 @@ export default function Home() {
     });
   }, [controls]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    // Here you would typically send the email to your backend
     alert(`Thank you for subscribing! We'll send updates to ${email}`);
     setEmail('');
-  };
+  }, [email]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="h-12 w-12 border-4 border-t-4 border-purple-400 rounded-full"
+        />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+        <p className="text-lg">Error: {error}. Please try again later or contact support.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen overflow-x-hidden">
@@ -143,6 +167,9 @@ export default function Home() {
               backgroundSize: 'cover',
               backgroundPosition: 'center'
             }}
+            onError={(e) => {
+              (e.target as HTMLDivElement).style.backgroundImage = `url('https://via.placeholder.com/1600x900?text=Image+Not+Available')`;
+            }}
           />
         </AnimatePresence>
 
@@ -166,7 +193,7 @@ export default function Home() {
             <motion.h1
               className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-500 to-blue-400"
             >
-              {config.banner.heading}
+              {config?.banner?.heading || 'Welcome to UniUnity'}
             </motion.h1>
             
             <motion.p
@@ -175,7 +202,7 @@ export default function Home() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="text-lg sm:text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed"
             >
-              {config.banner.subtext}
+              {config?.banner?.subtext || 'Your ultimate platform for innovation'}
             </motion.p>
           </motion.div>
 
@@ -355,6 +382,9 @@ export default function Home() {
                 src={imageUrls.feature}
                 alt="AI Workflow"
                 className="w-full h-auto object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/800x600?text=Image+Not+Available';
+                }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
               
@@ -442,6 +472,9 @@ export default function Home() {
                     src={image}
                     alt={`Project ${index + 1}`}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://via.placeholder.com/800x450?text=Image+Not+Available';
+                    }}
                   />
                 </div>
                 
@@ -525,6 +558,9 @@ export default function Home() {
                       src={imageUrls.testimonials[index]}
                       alt={testimonial.name}
                       className="w-12 h-12 rounded-full object-cover mr-4 border-2 border-white/20"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/200x200?text=Image+Not+Available';
+                      }}
                     />
                     <div className="absolute -bottom-1 -right-1 bg-blue-600 rounded-full p-1">
                       <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 24 24">
