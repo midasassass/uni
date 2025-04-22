@@ -4,14 +4,12 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
 import helmet from 'helmet';
-import morgan from 'morgan'; // Add for request logging
 
 const app = express();
 
 // Middleware
 app.use(helmet()); // Security headers
 app.use(express.json()); // Parse JSON bodies
-app.use(morgan('combined')); // Log HTTP requests
 
 // Enhanced CORS configuration to handle preflight requests
 app.use(cors({
@@ -72,7 +70,6 @@ app.post('/api/auth', async (req, res) => {
   try {
     const admin = await Admin.findOne({ email: username });
     if (admin && await bcrypt.compare(password, admin.password)) {
-      // In a real app, generate and return a JWT token here
       res.json({ success: true });
     } else {
       res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -198,7 +195,6 @@ app.post('/api/send-notification', (req, res) => {
     if (!message) {
       return res.status(400).json({ message: 'Notification message is required' });
     }
-    // Placeholder - replace with actual notification service (e.g., Firebase)
     res.json({ message: 'Notification sent' });
   } catch (error) {
     console.error('Send notification error:', error);
