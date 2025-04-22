@@ -3,17 +3,44 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { useDebounce } from 'use-debounce';
 import { FiEdit, FiTrash2, FiEye, FiSave, FiUpload, FiImage, FiSettings, FiFileText, FiBell } from 'react-icons/fi';
+import { useAdminStore } from '../../store/adminStore';
 
-// Lazy load component
 const MarkdownEditor = lazy(() => import('@uiw/react-markdown-editor').then(mod => ({ default: mod.default })));
 
 type TabType = 'posts' | 'new' | 'config' | 'analytics' | 'notifications';
 
+interface BlogPost {
+  _id: string;
+  title: string;
+  content: string;
+  slug: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  status: string;
+  createdAt: string;
+}
+
+interface Config {
+  title?: string;
+  favicon?: string;
+  banner?: {
+    heading?: string;
+    subtext?: string;
+  };
+  seo?: {
+    title?: string;
+    description?: string;
+  };
+  homepageAd?: {
+    text?: string;
+    image?: string;
+  };
+  adminUsername?: string;
+  adminPassword?: string;
+}
+
 const Admin = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<TabType>('posts');
+  const { isAuthenticated, login, logout, config, blogPosts, initialize, updateConfig, loading, error, addBlogPost, updateBlogPost, deleteBlogPost } = useAdminStore();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [slug, setSlug] = useState('');
@@ -21,23 +48,23 @@ const Admin = () => {
   const [seoDescription, setSeoDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
-  const [blogs, setBlogs] = useState([]);
-  const [admins, setAdmins] = useState([]);
-  const [config, setConfig] = useState<any>({});
   const [message, setMessage] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
   const [debouncedTitle] = useDebounce(title, 500);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
 
-  // Dynamic API base URL for production and local environments
-  const API_BASE_URL = process.env.NODE_ENV === 'production'
-    ? 'https://uniunity-4fnm.onrender.com/api'
-    : 'http://localhost:5000/api';
+  const API_BASE_URL = 'https://api.uniunity.space';
 
+  // Sync initial form state with config
   useEffect(() => {
-    fetchBlogs();
-    fetchAdmins();
-    fetchConfig();
-  }, []);
+    setTitle('');
+    setContent('');
+    setSlug('');
+    setSeoTitle('');
+    setSeoDescription('');
+    setEditingPostId(null);
+  }, [activeTab]);
 
   useEffect(() => {
     if (debouncedTitle) {
@@ -50,65 +77,15 @@ const Admin = () => {
     }
   }, [debouncedTitle, seoTitle]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (title || content) localStorage.setItem('draftPost', JSON.stringify({ title, content }));
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [title, content]);
+  const [activeTab, setActiveTab] = useState<TabType>('posts');
+
+  const fetchData = useCallback(async () => {
+    await initialize();
+  }, [initialize]);
 
   useEffect(() => {
-    const draft = localStorage.getItem('draftPost');
-    if (draft) {
-      const { title, content } = JSON.parse(draft);
-      setTitle(title);
-      setContent(content);
-    }
-  }, []);
-
-  const fetchBlogs = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/blogs`);
-      setBlogs(response.data);
-    } catch (error) {
-      setMessage('Failed to fetch blogs!');
-      setTimeout(() => setMessage(''), 3000);
-    }
-  };
-
-  const fetchAdmins = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/admins`);
-      setAdmins(response.data);
-    } catch (error) {
-      setMessage('Failed to fetch admins!');
-      setTimeout(() => setMessage(''), 3000);
-    }
-  };
-
-  const fetchConfig = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/config`);
-      setConfig(response.data);
-    } catch (error) {
-      setMessage('Failed to fetch config!');
-      setTimeout(() => setMessage(''), 3000);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await axios.post(`${API_BASE_URL}/auth`, { username, password });
-      if (response.data.success) {
-        setError('');
-      } else {
-        setError('Invalid credentials');
-      }
-    } catch (error) {
-      setError('Login failed!');
-    }
-  };
+    if (isAuthenticated) fetchData();
+  }, [isAuthenticated, fetchData]);
 
   const resetForm = useCallback(() => {
     setTitle('');
@@ -117,11 +94,10 @@ const Admin = () => {
     setSeoTitle('');
     setSeoDescription('');
     setEditingPostId(null);
-    localStorage.removeItem('draftPost');
   }, []);
 
   const loadPostForEditing = useCallback((postId: string) => {
-    const post = blogs.find((p: any) => p._id === postId);
+    const post = blogPosts.find(p => p._id === postId);
     if (post) {
       setTitle(post.title);
       setContent(post.content);
@@ -130,28 +106,34 @@ const Admin = () => {
       setSeoDescription(post.seoDescription || '');
       setEditingPostId(post._id);
       setActiveTab('new');
+    } else {
+      setMessage('Post not found for editing!');
     }
-  }, [blogs]);
+  }, [blogPosts]);
 
   const handleSubmitBlogPost = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const data = {
+      const postData = {
         title,
         content,
+        slug,
         seoTitle: seoTitle || `${title} | UniUnity`,
         seoDescription: seoDescription || content.substring(0, 160),
+        status: 'published',
       };
-      const url = editingPostId ? `${API_BASE_URL}/blogs/${editingPostId}` : `${API_BASE_URL}/blogs`;
-      const method = editingPostId ? 'put' : 'post';
 
-      await axios[method](url, data);
-      fetchBlogs();
+      if (editingPostId) {
+        await updateBlogPost(editingPostId, postData);
+      } else {
+        await addBlogPost(postData);
+      }
+
       resetForm();
       setMessage(`${editingPostId ? 'Updated' : 'Published'} post successfully!`);
-    } catch (error) {
-      setMessage('Post submission failed!');
+    } catch (err) {
+      setMessage(`Failed to ${editingPostId ? 'update' : 'publish'} post!`);
     }
     setIsSubmitting(false);
     setTimeout(() => setMessage(''), 3000);
@@ -160,11 +142,10 @@ const Admin = () => {
   const handleDeletePost = async (postId: string) => {
     if (confirm('Are you sure you want to delete this post?')) {
       try {
-        await axios.delete(`${API_BASE_URL}/blogs/${postId}`);
-        fetchBlogs();
+        await deleteBlogPost(postId);
         setMessage('Post deleted successfully!');
-      } catch (error) {
-        setMessage('Delete failed!');
+      } catch (err) {
+        setMessage('Failed to delete post!');
       }
       setTimeout(() => setMessage(''), 3000);
     }
@@ -172,16 +153,26 @@ const Admin = () => {
 
   const handleUpdateConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    const form = e.target as HTMLFormElement;
-    const data = new FormData(form);
+    const formData = new FormData(e.target as HTMLFormElement);
+    const configData: any = {};
+
+    formData.forEach((value, key) => {
+      if (key.includes('.')) {
+        const [parent, child] = key.split('.');
+        configData[parent] = configData[parent] || {};
+        configData[parent][child] = value;
+      } else {
+        configData[key] = value;
+      }
+    });
+
+    const currentPassword = (e.target as any).currentPassword?.value;
+    if (currentPassword) configData.currentPassword = currentPassword;
 
     try {
-      await axios.post(`${API_BASE_URL}/config`, data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      fetchConfig();
+      await updateConfig(configData);
       setMessage('Config updated successfully!');
-    } catch (error) {
+    } catch (err) {
       setMessage('Config update failed!');
     }
     setTimeout(() => setMessage(''), 3000);
@@ -190,10 +181,10 @@ const Admin = () => {
   const sendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_BASE_URL}/send-notification`, { message: notificationMessage });
+      await axios.post(`${API_BASE_URL}/api/send-notification`, { message: notificationMessage });
       setMessage('Notification sent successfully!');
       setNotificationMessage('');
-    } catch (error) {
+    } catch (err) {
       setMessage('Failed to send notification!');
     }
     setTimeout(() => setMessage(''), 3000);
@@ -205,7 +196,7 @@ const Admin = () => {
       await axios.post('https://www.google.com/ping?sitemap=' + encodeURIComponent(sitemap));
       await axios.post('https://www.bing.com/ping?sitemap=' + encodeURIComponent(sitemap));
       setMessage('Crawlers invited successfully!');
-    } catch (error) {
+    } catch (err) {
       setMessage('Crawler invitation failed!');
     }
     setTimeout(() => setMessage(''), 3000);
@@ -213,16 +204,33 @@ const Admin = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && activeTab === 'new') {
         e.preventDefault();
-        if (activeTab === 'new') handleSubmitBlogPost(e as any);
+        const form = document.querySelector('form');
+        if (form) form.requestSubmit();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, title, content, seoTitle, seoDescription]);
+  }, [activeTab]);
 
-  if (!username || !password) {
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="h-12 w-12 border-4 border-t-4 border-purple-400 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+        <p className="text-lg">Error: {error}. Contact support if persists.</p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 p-4">
         <motion.div
@@ -295,7 +303,7 @@ const Admin = () => {
             <FiFileText /> New Post
           </button>
           <button
-            onClick={() => { setUsername(''); setPassword(''); }}
+            onClick={handleLogout}
             className="px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-sm flex items-center gap-1 transition-colors"
           >
             Logout
@@ -350,6 +358,7 @@ const Admin = () => {
                 {message}
               </motion.div>
             )}
+
             {activeTab === 'posts' && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -371,15 +380,17 @@ const Admin = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-700">
-                        {blogs.map((post: any) => (
+                        {blogPosts.map((post) => (
                           <tr key={post._id} className="hover:bg-gray-800/50 transition-colors">
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="text-sm font-medium text-gray-100">{post.title}</div>
                               <div className="text-xs text-gray-400">{post.slug || ''}</div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <span className="px-2 py-1 text-xs rounded-full bg-green-900/50 text-green-300">
-                                Published
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                post.status === 'published' ? 'bg-green-900/50 text-green-300' : 'bg-yellow-900/50 text-yellow-300'
+                              }`}>
+                                {post.status.charAt(0).toUpperCase() + post.status.slice(1)}
                               </span>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
@@ -471,7 +482,7 @@ const Admin = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1">Content*</label>
-                      <Suspense fallback={<div className="h-64 bg-gray-800/50 rounded-md animate-pulse"></div>}>
+                      <Suspense fallback={<div className="h-64 bg-gray-800/50 rounded-md animate-pulse">Loading editor...</div>}>
                         <MarkdownEditor
                           value={content}
                           onChange={(value) => setContent(value)}
@@ -540,13 +551,12 @@ const Admin = () => {
                           name="favicon"
                           defaultValue={config.favicon || ''}
                           className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                          disabled
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">Banner Heading</label>
                         <input
-                          name="bannerHeading"
+                          name="banner.heading"
                           defaultValue={config.banner?.heading || 'Welcome to UniUnity'}
                           className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                         />
@@ -554,7 +564,7 @@ const Admin = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">Banner Subtext</label>
                         <input
-                          name="bannerSubtext"
+                          name="banner.subtext"
                           defaultValue={config.banner?.subtext || 'Your ultimate blogging platform'}
                           className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                         />
@@ -562,7 +572,7 @@ const Admin = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">SEO Title</label>
                         <input
-                          name="seoTitle"
+                          name="seo.title"
                           defaultValue={config.seo?.title || 'UniUnity Blog'}
                           className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                         />
@@ -570,7 +580,7 @@ const Admin = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">SEO Description</label>
                         <textarea
-                          name="seoDescription"
+                          name="seo.description"
                           defaultValue={config.seo?.description || 'Explore the best blogs on UniUnity'}
                           rows={3}
                           className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
@@ -579,7 +589,7 @@ const Admin = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">Homepage Ad Text</label>
                         <input
-                          name="adText"
+                          name="homepageAd.text"
                           defaultValue={config.homepageAd?.text || 'Check out our latest posts!'}
                           className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                         />
@@ -587,7 +597,7 @@ const Admin = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">Homepage Ad Image URL</label>
                         <input
-                          name="adImage"
+                          name="homepageAd.image"
                           defaultValue={config.homepageAd?.image || ''}
                           className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                         />
@@ -601,11 +611,20 @@ const Admin = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Admin Password</label>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Current Password</label>
+                        <input
+                          name="currentPassword"
+                          type="password"
+                          placeholder="Enter current password"
+                          className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">New Admin Password</label>
                         <input
                           name="adminPassword"
                           type="password"
-                          defaultValue={config.adminPassword || ''}
+                          placeholder="Leave empty to keep current"
                           className="w-full px-4 py-2 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                         />
                       </div>
@@ -681,24 +700,24 @@ const Admin = () => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
                       <h3 className="text-lg font-medium text-gray-300 mb-2">Total Posts</h3>
-                      <p className="text-3xl font-bold text-purple-400">{blogs.length}</p>
+                      <p className="text-3xl font-bold text-purple-400">{blogPosts.length}</p>
                     </div>
                     <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
                       <h3 className="text-lg font-medium text-gray-300 mb-2">Published</h3>
-                      <p className="text-3xl font-bold text-green-400">{blogs.filter((p: any) => p.status === 'published').length}</p>
+                      <p className="text-3xl font-bold text-green-400">{blogPosts.filter(p => p.status === 'published').length}</p>
                     </div>
                     <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
                       <h3 className="text-lg font-medium text-gray-300 mb-2">Drafts</h3>
-                      <p className="text-3xl font-bold text-yellow-400">{blogs.filter((p: any) => p.status === 'draft').length}</p>
+                      <p className="text-3xl font-bold text-yellow-400">{blogPosts.filter(p => p.status === 'draft').length}</p>
                     </div>
                   </div>
                   <div className="mt-8">
                     <h3 className="text-lg font-medium text-gray-300 mb-4">Recent Activity</h3>
                     <div className="space-y-4">
-                      {[...blogs]
-                        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      {[...blogPosts]
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                         .slice(0, 5)
-                        .map((post: any) => (
+                        .map((post) => (
                           <div key={post._id} className="flex items-start gap-3 p-3 bg-gray-800/30 rounded-lg border border-gray-700">
                             <div className="bg-purple-900/50 p-2 rounded-full">
                               <FiEdit className="text-purple-400" />
